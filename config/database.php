@@ -1,30 +1,20 @@
-
 <?php
-
-$host = "127.0.0.1";
-$dbname = "ais_db";
-$username = "ais_user";
-$password = "AIS_Local_Dev_ChangeThis123!";
+$host = getenv('AIS_DB_HOST') ?: '127.0.0.1';
+$dbname = getenv('AIS_DB_NAME') ?: 'ais_db';
+$username = getenv('AIS_DB_USER') ?: 'ais_user';
+$password = getenv('AIS_DB_PASS') ?: 'AIS_Local_Dev_ChangeThis123!';
 
 try {
     $pdo = new PDO(
-        "mysql:host=$host;dbname=$dbname;charset=utf8mb4",
+        "mysql:host={$host};dbname={$dbname};charset=utf8mb4",
         $username,
-        $password
+        $password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]
     );
-
-    $pdo->setAttribute(
-        PDO::ATTR_ERRMODE,
-        PDO::ERRMODE_EXCEPTION
-    );
-
-    $pdo->setAttribute(
-        PDO::ATTR_DEFAULT_FETCH_MODE,
-        PDO::FETCH_ASSOC
-    );
-
 } catch (PDOException $e) {
-    error_log("Database connection failed: " . $e->getMessage());
-    http_response_code(500);
-    exit("Database connection failed. Check the server configuration.");
+    error_log('Database connection failed: ' . $e->getMessage());
+    throw new RuntimeException('Database connection failed. Check the server configuration and local database setup.', 0, $e);
 }
