@@ -13,6 +13,7 @@
   const toast = $('#toast');
   let lowOnly = false;
   let toastTimer;
+  let navigationSequence = 0;
 
   function notify(message) {
     if (!toast) return;
@@ -104,18 +105,26 @@
   $('#review-merge')?.addEventListener('click', () => notify('Review duplicate barcodes and product records before merging.'));
   $('#restock-link')?.addEventListener('click', event => { event.preventDefault(); notify('Use the inventory export to prepare a restock list.'); });
 
-  async function showTab(view) {
+  async function showTab(view, { updateHistory = true } = {}) {
     if (view === 'Inventory') {
-      window.location.href = 'index.php';
+      if (updateHistory) history.pushState({ view }, '', window.location.pathname);
+      window.location.href = window.location.pathname;
       return;
     }
+    const allowed = ['Sales', 'Receivables', 'Payables', 'Reports', 'Summary', 'Users', 'Settings'];
+    if (!allowed.includes(view)) return;
     const panel = $('.main-panel');
     if (!panel) return;
+    const sequence = ++navigationSequence;
     panel.setAttribute('aria-busy', 'true');
     try {
-      const response = await fetch(`admin/views.php?view=${encodeURIComponent(view)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const response = await fetch(`admin/views.php?view=${encodeURIComponent(view)}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
       if (!response.ok) throw new Error('Tab could not be loaded');
-      panel.innerHTML = await response.text();
+      const content = await response.text();
+      if (sequence !== navigationSequence) return;
+      panel.innerHTML = content;
       $$('.nav-item').forEach(item => {
         const active = item.dataset.view === view;
         item.classList.toggle('active', active);
@@ -123,11 +132,17 @@
       });
       const title = $('#page-title');
       if (title) title.textContent = view;
+      if (updateHistory) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', view);
+        history.pushState({ view }, '', url);
+      }
+      document.title = `${view} · AIS Sari-Sari Store`;
       panel.focus({ preventScroll: true });
     } catch (error) {
-      notify('Could not load this tab. Check the server connection and try again.');
+      if (sequence === navigationSequence) notify('Could not load this tab. Check the server connection and try again.');
     } finally {
-      panel.removeAttribute('aria-busy');
+      if (sequence === navigationSequence) panel.removeAttribute('aria-busy');
     }
   }
 
@@ -140,6 +155,11 @@
     }
     const exportButton = event.target.closest('[data-export-table]');
     if (exportButton) exportTable(exportButton.dataset.exportTable, exportButton.dataset.filename);
+  });
+
+  window.addEventListener('popstate', event => {
+    const view = event.state?.view || new URLSearchParams(window.location.search).get('view') || 'Inventory';
+    showTab(view, { updateHistory: false });
   });
 
   document.addEventListener('input', event => {
@@ -178,4 +198,7 @@
     link.href = url; link.download = 'ais-inventory.csv'; link.click(); URL.revokeObjectURL(url);
     notify('Inventory CSV exported.');
   });
+
+  const initialView = new URLSearchParams(window.location.search).get('view');
+  if (initialView && initialView !== 'Inventory') showTab(initialView, { updateHistory: false });
 })();
